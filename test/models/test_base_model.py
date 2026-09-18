@@ -931,6 +931,82 @@ class TestBaseModelBackend:
             and processed[3]['content'] == 'The weather is 72°F.'
         )
 
+        # Test 7: Multi-round sequential tool calls within a single turn
+        # Ensure chronological order is preserved when multiple tool rounds
+        # precede an assistant response or user message (Issue #4340).
+        call_id_1 = str(uuid.uuid4())
+        call_id_2 = str(uuid.uuid4())
+        messages = [
+            {'role': 'system', 'content': 'You are a helpful assistant.'},
+            {
+                'role': 'user',
+                'content': 'What is the weather and stock price?',
+            },
+            {
+                'role': 'assistant',
+                'content': None,
+                'tool_calls': [
+                    create_tool_call(
+                        call_id_1, 'get_weather', '{"location":"Tokyo"}'
+                    )
+                ],
+            },
+            {
+                'role': 'tool',
+                'tool_call_id': call_id_1,
+                'content': '{"temperature": 20}',
+            },
+            {
+                'role': 'assistant',
+                'content': None,
+                'tool_calls': [
+                    create_tool_call(
+                        call_id_2, 'get_stock', '{"symbol":"7203.T"}'
+                    )
+                ],
+            },
+            {
+                'role': 'tool',
+                'tool_call_id': call_id_2,
+                'content': '{"price": 3000}',
+            },
+            {
+                'role': 'assistant',
+                'content': 'The weather is 20°C and stock price is 3000 yen.',
+            },
+            {'role': 'user', 'content': 'Thanks!'},
+        ]
+
+        processed = model.preprocess_messages(messages)
+        assert len(processed) == 8
+        assert processed[0]['role'] == 'system'
+        assert processed[1]['role'] == 'user'
+        assert (
+            processed[2]['role'] == 'assistant'
+            and processed[2]['tool_calls'][0]['id'] == call_id_1
+        )
+        assert (
+            processed[3]['role'] == 'tool'
+            and processed[3]['tool_call_id'] == call_id_1
+        )
+        assert (
+            processed[4]['role'] == 'assistant'
+            and processed[4]['tool_calls'][0]['id'] == call_id_2
+        )
+        assert (
+            processed[5]['role'] == 'tool'
+            and processed[5]['tool_call_id'] == call_id_2
+        )
+        assert (
+            processed[6]['role'] == 'assistant'
+            and processed[6]['content']
+            == 'The weather is 20°C and stock price is 3000 yen.'
+        )
+        assert (
+            processed[7]['role'] == 'user'
+            and processed[7]['content'] == 'Thanks!'
+        )
+
     def _make_completion(self, content, reasoning_content=None):
         r"""Helper to create a ChatCompletion with given content."""
         msg = ChatCompletionMessage(role='assistant', content=content)
