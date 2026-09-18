@@ -547,6 +547,11 @@ class BaseModelBackend(ABC, metaclass=ModelBackendMeta):
         formatted_messages = []
         tool_calls_buffer = []
         tool_responses_buffer = {}
+        answered_ids = {
+            msg.get("tool_call_id")
+            for msg in processed_messages  # type: ignore[union-attr]
+            if msg.get("role") == "tool"
+        }
 
         for msg in processed_messages:  # type: ignore[assignment]
             # If this is an assistant message with tool calls, add it to the
@@ -564,7 +569,11 @@ class BaseModelBackend(ABC, metaclass=ModelBackendMeta):
 
             # Process any complete tool call + responses before adding regular
             # messages
-            while tool_calls_buffer:
+            while tool_calls_buffer and not any(
+                tc.get("id") in answered_ids
+                and tc.get("id") not in tool_responses_buffer
+                for tc in tool_calls_buffer[0].get("tool_calls", []) or []
+            ):
                 # Add the assistant message with tool calls
                 assistant_msg = tool_calls_buffer[0]
                 formatted_messages.append(assistant_msg)

@@ -1040,6 +1040,50 @@ class TestBaseModelBackend:
             and processed[2]['content'] == 'Here is the confirmation.'
         )
 
+        # Test 9: Tool call with intervening regular message before response
+        # Ensure tool call is kept buffered until its response arrives,
+        # avoiding orphaned tool responses.
+        intervene_call_id = str(uuid.uuid4())
+        messages = [
+            {'role': 'user', 'content': 'Query'},
+            {
+                'role': 'assistant',
+                'content': None,
+                'tool_calls': [
+                    create_tool_call(
+                        intervene_call_id,
+                        'fetch_data',
+                        '{"query":"test"}',
+                    )
+                ],
+            },
+            {'role': 'user', 'content': 'Interjection'},
+            {
+                'role': 'tool',
+                'tool_call_id': intervene_call_id,
+                'content': '{"result": "ok"}',
+            },
+        ]
+
+        processed = model.preprocess_messages(messages)
+        assert len(processed) == 4
+        assert (
+            processed[0]['role'] == 'user'
+            and processed[0]['content'] == 'Query'
+        )
+        assert (
+            processed[1]['role'] == 'user'
+            and processed[1]['content'] == 'Interjection'
+        )
+        assert (
+            processed[2]['role'] == 'assistant'
+            and processed[2]['tool_calls'][0]['id'] == intervene_call_id
+        )
+        assert (
+            processed[3]['role'] == 'tool'
+            and processed[3]['tool_call_id'] == intervene_call_id
+        )
+
     def _make_completion(self, content, reasoning_content=None):
         r"""Helper to create a ChatCompletion with given content."""
         msg = ChatCompletionMessage(role='assistant', content=content)
