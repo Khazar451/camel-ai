@@ -1007,6 +1007,39 @@ class TestBaseModelBackend:
             and processed[7]['content'] == 'Thanks!'
         )
 
+        # Test 8: External / unanswered tool call followed by user message
+        # Ensure tool call without internal response is emitted in place
+        # before subsequent user messages.
+        ext_call_id = str(uuid.uuid4())
+        messages = [
+            {'role': 'user', 'content': 'Please execute external task.'},
+            {
+                'role': 'assistant',
+                'content': None,
+                'tool_calls': [
+                    create_tool_call(
+                        ext_call_id, 'external_action', '{"target":"device"}'
+                    )
+                ],
+            },
+            {'role': 'user', 'content': 'Here is the confirmation.'},
+        ]
+
+        processed = model.preprocess_messages(messages)
+        assert len(processed) == 3
+        assert (
+            processed[0]['role'] == 'user'
+            and processed[0]['content'] == 'Please execute external task.'
+        )
+        assert (
+            processed[1]['role'] == 'assistant'
+            and processed[1]['tool_calls'][0]['id'] == ext_call_id
+        )
+        assert (
+            processed[2]['role'] == 'user'
+            and processed[2]['content'] == 'Here is the confirmation.'
+        )
+
     def _make_completion(self, content, reasoning_content=None):
         r"""Helper to create a ChatCompletion with given content."""
         msg = ChatCompletionMessage(role='assistant', content=content)

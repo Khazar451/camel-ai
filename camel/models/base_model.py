@@ -564,7 +564,7 @@ class BaseModelBackend(ABC, metaclass=ModelBackendMeta):
 
             # Process any complete tool call + responses before adding regular
             # messages
-            while tool_calls_buffer and tool_responses_buffer:
+            while tool_calls_buffer:
                 # Add the assistant message with tool calls
                 assistant_msg = tool_calls_buffer[0]
                 formatted_messages.append(assistant_msg)
